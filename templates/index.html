@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cricket Pose Detection</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Instrument+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0a0c10;
+            --surface: #12151c;
+            --border: #1e2330;
+            --border-glow: #2a3040;
+            --text: #c8cdd8;
+            --text-dim: #5a6270;
+            --accent: #00f5b4;
+            --accent-dim: rgba(0, 245, 180, 0.08);
+            --danger: #ff3b5c;
+            --danger-dim: rgba(255, 59, 92, 0.08);
+            --mono: 'DM Mono', monospace;
+            --sans: 'Instrument Sans', sans-serif;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: var(--sans);
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Subtle grid background */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background-image:
+                linear-gradient(var(--border) 1px, transparent 1px),
+                linear-gradient(90deg, var(--border) 1px, transparent 1px);
+            background-size: 60px 60px;
+            opacity: 0.25;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .app {
+            position: relative;
+            z-index: 1;
+            max-width: 920px;
+            margin: 0 auto;
+            padding: 32px 24px;
+        }
+
+        /* Header */
+        .header {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            margin-bottom: 28px;
+        }
+
+        .header-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            background: linear-gradient(135deg, var(--accent), #00c896);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            flex-shrink: 0;
+        }
+
+        .header h1 {
+            font-size: 1.15rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            color: #eef0f4;
+        }
+
+        .header .tag {
+            font-family: var(--mono);
+            font-size: 0.65rem;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--accent);
+            background: var(--accent-dim);
+            border: 1px solid rgba(0, 245, 180, 0.15);
+            padding: 3px 8px;
+            border-radius: 4px;
+            margin-left: auto;
+        }
+
+        /* Video panel */
+        .video-panel {
+            position: relative;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 40px rgba(0, 0, 0, 0.4);
+        }
+
+        .video-panel img {
+            display: block;
+            width: 100%;
+            height: auto;
+            aspect-ratio: 640 / 480;
+            object-fit: cover;
+        }
+
+        /* Corner decorations on video */
+        .video-panel::before,
+        .video-panel::after {
+            content: '';
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            border-color: var(--accent);
+            border-style: solid;
+            opacity: 0.4;
+            z-index: 2;
+            pointer-events: none;
+        }
+        .video-panel::before {
+            top: 12px; left: 12px;
+            border-width: 2px 0 0 2px;
+        }
+        .video-panel::after {
+            bottom: 12px; right: 12px;
+            border-width: 0 2px 2px 0;
+        }
+
+        /* Live badge */
+        .live-badge {
+            position: absolute;
+            top: 14px;
+            right: 14px;
+            z-index: 3;
+            font-family: var(--mono);
+            font-size: 0.6rem;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            color: #ff3b5c;
+            background: rgba(255, 59, 92, 0.12);
+            border: 1px solid rgba(255, 59, 92, 0.25);
+            padding: 3px 10px;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .live-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #ff3b5c;
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+
+        /* Telemetry strip below video */
+        .telemetry {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 1px;
+            margin-top: 1px;
+            background: var(--border);
+            border-radius: 0 0 12px 12px;
+            overflow: hidden;
+        }
+
+        .tele-cell {
+            background: var(--surface);
+            padding: 16px 20px;
+            transition: background 0.3s;
+        }
+        .tele-cell:first-child { border-radius: 0 0 0 12px; }
+        .tele-cell:last-child { border-radius: 0 0 12px 0; }
+
+        .tele-label {
+            font-family: var(--mono);
+            font-size: 0.6rem;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--text-dim);
+            margin-bottom: 6px;
+        }
+
+        .tele-value {
+            font-family: var(--mono);
+            font-size: 1.35rem;
+            font-weight: 500;
+            color: #eef0f4;
+            letter-spacing: -0.02em;
+        }
+
+        .tele-value .unit {
+            font-size: 0.7rem;
+            color: var(--text-dim);
+            margin-left: 2px;
+        }
+
+        /* Status indicator */
+        .status-cell {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            flex-shrink: 0;
+            transition: background 0.3s, box-shadow 0.3s;
+        }
+
+        .status-dot.standing {
+            background: var(--accent);
+            box-shadow: 0 0 12px rgba(0, 245, 180, 0.4);
+        }
+        .status-dot.kneeling {
+            background: var(--danger);
+            box-shadow: 0 0 12px rgba(255, 59, 92, 0.4);
+            animation: pulse 1s ease-in-out infinite;
+        }
+        .status-dot.none {
+            background: #3a3f4c;
+            box-shadow: none;
+        }
+
+        .status-text {
+            font-family: var(--mono);
+            font-size: 0.85rem;
+            font-weight: 500;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            transition: color 0.3s;
+        }
+        .status-text.standing { color: var(--accent); }
+        .status-text.kneeling { color: var(--danger); }
+        .status-text.none { color: var(--text-dim); }
+
+        /* Kneeling state background glow */
+        .tele-cell.is-kneeling {
+            background: var(--danger-dim);
+        }
+        .tele-cell.is-standing {
+            background: var(--accent-dim);
+        }
+
+        /* Footer */
+        .footer {
+            margin-top: 20px;
+            text-align: center;
+            font-family: var(--mono);
+            font-size: 0.6rem;
+            color: var(--text-dim);
+            letter-spacing: 0.06em;
+        }
+
+        /* Fade-in on load */
+        .app {
+            animation: fadeUp 0.6s ease-out;
+        }
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(12px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body>
+    <div class="app">
+        <div class="header">
+            <div class="header-icon">&#9899;</div>
+            <h1>Cricket Pose Detection</h1>
+            <span class="tag">Phase 1</span>
+        </div>
+
+        <div class="video-panel">
+            <div class="live-badge"><span class="live-dot"></span> Live</div>
+            <img src="/video_feed" alt="Video Feed">
+        </div>
+
+        <div class="telemetry">
+            <div class="tele-cell" id="status-cell">
+                <div class="tele-label">Pose Status</div>
+                <div class="status-cell">
+                    <div class="status-dot none" id="status-dot"></div>
+                    <span class="status-text none" id="status-text">---</span>
+                </div>
+            </div>
+            <div class="tele-cell">
+                <div class="tele-label">L Knee</div>
+                <div class="tele-value" id="left-angle">---<span class="unit">&deg;</span></div>
+            </div>
+            <div class="tele-cell">
+                <div class="tele-label">R Knee</div>
+                <div class="tele-value" id="right-angle">---<span class="unit">&deg;</span></div>
+            </div>
+        </div>
+
+        <div class="footer">Side-view kneeling detection &middot; MediaPipe Pose</div>
+    </div>
+
+    <script>
+        const dot = document.getElementById('status-dot');
+        const text = document.getElementById('status-text');
+        const cell = document.getElementById('status-cell');
+        const leftAngle = document.getElementById('left-angle');
+        const rightAngle = document.getElementById('right-angle');
+
+        function fmt(v) {
+            return v != null ? `${v}<span class="unit">&deg;</span>` : '---<span class="unit">&deg;</span>';
+        }
+
+        setInterval(async () => {
+            try {
+                const res = await fetch('/status');
+                const d = await res.json();
+
+                leftAngle.innerHTML = fmt(d.left_knee_angle);
+                rightAngle.innerHTML = fmt(d.right_knee_angle);
+
+                // Reset classes
+                dot.className = 'status-dot';
+                text.className = 'status-text';
+                cell.className = 'tele-cell';
+
+                if (!d.landmarks_detected) {
+                    dot.classList.add('none');
+                    text.classList.add('none');
+                    text.textContent = 'No Pose';
+                } else if (d.kneeling) {
+                    dot.classList.add('kneeling');
+                    text.classList.add('kneeling');
+                    cell.classList.add('is-kneeling');
+                    text.textContent = 'Kneeling';
+                } else {
+                    dot.classList.add('standing');
+                    text.classList.add('standing');
+                    cell.classList.add('is-standing');
+                    text.textContent = 'Standing';
+                }
+            } catch (e) {}
+        }, 150);
+    </script>
+</body>
+</html>
